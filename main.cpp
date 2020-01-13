@@ -1,6 +1,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <sodium.h>
 
 #include "c++/viewmodels/MainViewModel.h"
 
@@ -11,6 +12,10 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
 
     QQmlApplicationEngine engine;
+
+    // Initialize Sodium.
+    if(sodium_init() == -1)
+        return 1;
 
     // Create ViewModels.
     sMainViewModel = new MainViewModel();

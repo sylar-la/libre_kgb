@@ -2,6 +2,7 @@
 #define MAINVIEWMODEL_H
 
 #include <QObject>
+#include <thread>
 
 class MainViewModel : public QObject
 {
@@ -10,10 +11,21 @@ public:
     MainViewModel();
 
     Q_INVOKABLE
-    void        initialize();
+    void            initialize();
 
     Q_INVOKABLE
-    void        shutdown();
+    void            shutdown();
+
+    Q_INVOKABLE
+    void            transmitStart();
+    Q_INVOKABLE
+    void            transmitStop();
+private:
+    void            transmitRoutine();
+private:
+    std::thread*    m_pTransmitThread = nullptr;
+    bool            m_bTransmitThreadContinue = false;
+    bool            m_bTransmit = false;
 };
 
 extern MainViewModel* sMainViewModel;

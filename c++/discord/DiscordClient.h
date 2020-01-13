@@ -28,6 +28,8 @@ public:
     void                            voiceConnect();
     void                            voiceDisconnect();
 
+    DiscordVoiceConnection*         getVoiceConnection();
+
     QString                         strSessionId;
 
     QString                         strVoiceToken;

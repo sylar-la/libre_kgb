@@ -61,3 +61,8 @@ void DiscordClient::voiceDisconnect()
         m_pVoiceConnection->voiceDisconnect();
     }
 }
+
+DiscordVoiceConnection* DiscordClient::getVoiceConnection()
+{
+    return m_pVoiceConnection;
+}
