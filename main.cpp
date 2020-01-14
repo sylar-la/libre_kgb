@@ -1,7 +1,11 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+
+#include <QDebug>
+
 #include <sodium.h>
+#include <portaudio.h>
 
 #include "c++/viewmodels/MainViewModel.h"
 
@@ -15,7 +19,17 @@ int main(int argc, char *argv[])
 
     // Initialize Sodium.
     if(sodium_init() == -1)
+    {
+        qDebug() << "Failed to initialize Sodium";
         return 1;
+    }
+
+    // Initialize PortAudio.
+    if(Pa_Initialize() != paNoError)
+    {
+        qDebug() << "Failed to initialize PortAudio";
+        return 1;
+    }
 
     // Create ViewModels.
     sMainViewModel = new MainViewModel();

@@ -1,4 +1,4 @@
-QT += quick network websockets networkauth
+QT += quick network websockets multimedia
 
 CONFIG += c++11
 
@@ -15,9 +15,11 @@ DEFINES += QT_DEPRECATED_WARNINGS SODIUM_STATIC
 
 INCLUDEPATH += \
         deps/libsodium/include \
-        deps/opus/include
+        deps/opus/include \
+        deps/portaudio/include
 
 SOURCES += \
+        c++/audio/AudioService.cpp \
         c++/configuration/LibreKGBConfiguration.cpp \
         c++/discord/DiscordClient.cpp \
         c++/discord/DiscordGatewayConnection.cpp \
@@ -42,6 +44,7 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
 HEADERS += \
+    c++/audio/AudioService.h \
     c++/configuration/LibreKGBConfiguration.h \
     c++/discord/DiscordClient.h \
     c++/discord/DiscordGatewayConnection.h \
@@ -53,4 +56,6 @@ HEADERS += \
 
 LIBS += \
     $$PWD/deps/libsodium/lib/libsodium.lib \
-    $$PWD/deps/opus/lib/opus.lib
+    $$PWD/deps/opus/lib/opus.lib \
+    $$PWD/deps/portaudio/lib/portaudio.lib \
+    User32.lib

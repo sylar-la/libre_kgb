@@ -2,6 +2,7 @@
 
 #include "../discord/DiscordClient.h"
 #include "../configuration/LibreKGBConfiguration.h"
+#include "../audio/AudioService.h"
 
 #include <QDebug>
 #include <random>
@@ -20,6 +21,11 @@ void MainViewModel::initialize()
 
     // Create the Discord Client.
     sDiscordClient = new DiscordClient();
+
+    // Initialize AudioService.
+    sAudioService->initialize();
+
+    // Connect to Discord.
     sDiscordClient->mainConnect();
 
     // Create the Voice Transmit routine.
@@ -31,6 +37,8 @@ void MainViewModel::initialize()
 
 void MainViewModel::shutdown()
 {
+    sAudioService->shutdown();
+
     sDiscordClient->mainDisconnect();
 
     m_bTransmitThreadContinue = false;
@@ -60,19 +68,16 @@ void MainViewModel::transmitRoutine()
     {
         if(m_bTransmit)
         {
-            // TODO Send Voice data.
-            qDebug() << "Transmitting ...";
+
 
             // Generate random payload of sound data.
-            unsigned char aData[136];
-            for(int i = 0; i < 136; i++)
+            /*unsigned char aData[960];
+            for(int i = 0; i < 960; i++)
             {
                 aData[i] = rand() % 256;
-            }
-
-            sDiscordClient->getVoiceConnection()->sendVoiceData(aData, 136);
+            }*/
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }

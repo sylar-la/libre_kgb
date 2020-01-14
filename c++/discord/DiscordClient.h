@@ -8,7 +8,6 @@
 #include <QSslConfiguration>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QtNetworkAuth>
 
 #include <QtWebSockets/QtWebSockets>
 

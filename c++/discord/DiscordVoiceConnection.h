@@ -9,6 +9,15 @@
 
 #include <opus.h>
 
+#include <mutex>
+#include <queue>
+
+typedef struct
+{
+    float       data[960*2];
+    uint32_t    size;
+} SOpusFrame;
+
 class DiscordVoiceConnection : public DiscordWebSocketConnection
 {
     Q_OBJECT
@@ -26,6 +35,9 @@ public:
     void            setSpeaking(bool bSpeaking);
 
     void            sendVoiceData(const uint8_t* pData, uint32_t lLength);
+
+    std::mutex      m_mtxOpusFramesMutex;
+    std::queue<SOpusFrame*> m_qOpusFrames;
 private slots:
     void            onUDPDataAvailable();
 private:
@@ -38,6 +50,7 @@ private:
     uint16_t        m_lSendVoiceSequenceId = 1;
     uint32_t        m_lSendVoiceTimestamp = 1;
     OpusDecoder*    m_pOpusDecoder = nullptr;
+    OpusEncoder*    m_pOpusEncoder = nullptr;
 };
 
 #endif

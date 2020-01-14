@@ -5,20 +5,33 @@
 #include <QtEndian>
 
 #include "../network/Buffer.h"
+#include "../audio/AudioService.h"
 
 DiscordVoiceConnection::DiscordVoiceConnection() : DiscordWebSocketConnection("Voice")
 {
+    // Create the UDP Socket
     m_pUDPSocket = new QUdpSocket(this);
 
+    // Create the OPUS decoder.
     int opusError;
     m_pOpusDecoder = opus_decoder_create(48000, 2, &opusError);
 
     if(opusError < 0)
     {
-        qDebug() << "OPUS Error: " << opusError;
+        qDebug() << "OPUS Decoder Create Error: " << opusError;
         exit(1);
     }
 
+    // Create the OPUS encoder.
+    m_pOpusEncoder = opus_encoder_create(48000, 2, OPUS_APPLICATION_VOIP, &opusError);
+
+    if(opusError < 0)
+    {
+        qDebug() << "OPUS Encoder Create Error: " << opusError;
+        exit(1);
+    }
+
+    // Connect signal for incoming UDP datagrams to slot.
     connect(m_pUDPSocket, &QUdpSocket::readyRead, this, &DiscordVoiceConnection::onUDPDataAvailable);
 }
 
@@ -57,7 +70,7 @@ void DiscordVoiceConnection::onJSONPayloadReceived(QJsonObject &jsonObject)
             // Voice Ready.
             qDebug() << "VOICE Ready";
 
-            DUMP_JSON(jsonData)
+            //DUMP_JSON(jsonData)
 
             m_strUDPServerIP = jsonData.take("ip").toString();
             m_lUDPServerPort = jsonData.take("port").toInt();
@@ -86,7 +99,7 @@ void DiscordVoiceConnection::onJSONPayloadReceived(QJsonObject &jsonObject)
             // Session Description.
             qDebug() << "VOICE Session Description";
 
-            DUMP_JSON(jsonData)
+            //DUMP_JSON(jsonData)
 
             QJsonArray aSecretKeyValues = jsonData.take("secret_key").toArray();
 
@@ -205,6 +218,8 @@ void DiscordVoiceConnection::onUDPDataAvailable()
             uint32_t lTimestamp = datagramBuffer.Read<uint32_t>(4);
             uint32_t lSSRC = datagramBuffer.Read<uint32_t>(8);
 
+            //qDebug() << "SSRC " << lSSRC << " Seq " << lSequenceNumber << " Timestamp " << lTimestamp;
+
             unsigned char aXSalsaNonce[24] = { 0 };
             memcpy(aXSalsaNonce, datagramBuffer.GetBuffer(), 12); // header is 12 bytes from packet + 12 null bytes.
 
@@ -218,28 +233,56 @@ void DiscordVoiceConnection::onUDPDataAvailable()
             }
             else
             {
-                qDebug() << "Channels: " << opus_packet_get_nb_channels(pDecryptedData);
+                qDebug() << "bandwidth " << opus_packet_get_bandwidth(pDecryptedData);
+                qDebug() << "nbFrames " << opus_packet_get_nb_frames(pDecryptedData, datagramBuffer.GetSize() - 12);
+                qDebug() << "samplesPerFrame " << opus_packet_get_samples_per_frame(pDecryptedData, 48000);
 
-                opus_int16 opusFrameOut[1024*2];
-                int opusFrameSize = opus_decode(m_pOpusDecoder, pDecryptedData + 8, datagramBuffer.GetSize() - 20, opusFrameOut, 1024, 0);
+                float pcmFrames[960*2];
+                int pcmFrameSize = opus_decode_float(m_pOpusDecoder, pDecryptedData + 8, datagramBuffer.GetSize() - 20, pcmFrames, 960, 0);
 
-                if(opusFrameSize < 0)
+                if(pcmFrameSize < 0)
                 {
                     qDebug() << "Opus Decode failed!";
                 }
                 else
                 {
-                    qDebug() << "Valid Opus Frames available";
+                    // These are always two 960-byte frames = 20 ms of Opus Audio at 48 kHz.
+                    qDebug() << "Valid Opus Frame from available size: " << pcmFrameSize;
+
+                    Pa_WriteStream(sAudioService->getStream(), pcmFrames, 960);
+
+                    // Store the frame.
+                    /**/
+
+                    //m_mtxOpusFramesMutex.lock();
+                    //{
+
+                    //}
+                    //m_mtxOpusFramesMutex.unlock();
                 }
             }
         }
+        else if(datagramBuffer.Read<uint8_t>(0) == 0xF8)
+        {
+            qDebug() << "Silence Packet";
+        }
         else
+        {
+            // TODO make a stat of malformed packets %age.
             qDebug() << "MALFORMED VOICE PACKET !!!!";
+            qDebug() << QByteArray((char*)datagramBuffer.GetBuffer(), datagramBuffer.GetSize()).toHex();
+        }
     }
 }
 
 void DiscordVoiceConnection::sendVoiceData(const uint8_t* pData, uint32_t lLength)
 {
+    // Encode with Opus.
+    unsigned char opusEncoded[1024];
+    int opusEncodedLength = opus_encode(m_pOpusEncoder, (short*)pData, lLength, opusEncoded, 1024);
+
+    qDebug() << "Opus Encoded Size: " << opusEncodedLength;
+
     Buffer sendBuffer;
     sendBuffer.WriteUInt8(0x90);
     sendBuffer.WriteUInt8(0x78);
@@ -252,10 +295,9 @@ void DiscordVoiceConnection::sendVoiceData(const uint8_t* pData, uint32_t lLengt
 
     unsigned char aEncrypted[1024] { 0 };
 
-    int encryptResult = crypto_secretbox_easy(aEncrypted, pData, lLength, aNonce, m_salsaSecretKey);
+    int encryptResult = crypto_secretbox_easy(aEncrypted, opusEncoded, opusEncodedLength, aNonce, m_salsaSecretKey);
 
     qDebug() << "Encrypt Result: " << encryptResult;
-    //qDebug() << QByteArray((char*)aEncrypted, lLength).toHex();
 
     sendBuffer.Append(aEncrypted, lLength);
 
