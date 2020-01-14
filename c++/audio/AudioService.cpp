@@ -12,77 +12,70 @@ AudioService::AudioService()
 
 }
 
-void AudioService::playTestSound()
-{
-
-}
-
-PaStream* AudioService::getStream()
-{
-    return m_pStream;
-}
-
 void AudioService::initialize()
 {
-    if(Pa_OpenDefaultStream(&m_pStream, 0, 2, paFloat32, 48000, 960 * 2, NULL, NULL) != paNoError)
-    {
-        qDebug() << "Failed to open play stream!";
-    }
 
-    if(Pa_StartStream(m_pStream) != paNoError)
-    {
-        qDebug() << "Failed to start play stream!";
-    }
-
-    /*m_pAudioThread = new std::thread([this]()
-    {
-        audioThreadRoutine();
-    });*/
 }
 
 void AudioService::shutdown()
 {
-    Pa_StopStream(m_pStream);
-}
-
-void AudioService::audioThreadRoutine()
-{
-    m_bAudioThreadContinue = true;
-
-    while(m_bAudioThreadContinue)
+    // Stop all active streams.
+    m_mtxStreamsBySSRCMutex.lock();
     {
-        if(!sDiscordClient->getVoiceConnection()->m_qOpusFrames.empty())
+        for(auto kp : m_mStreamsBySSRC)
         {
-            SOpusFrame* pOpusFrame = sDiscordClient->getVoiceConnection()->m_qOpusFrames.front();
+            PaStream* pStream = kp.second;
 
-            if(Pa_WriteStream(m_pStream, pOpusFrame->data, 960 * 2) != paNoError)
-            {
-                qDebug() << "Failed to play frame!";
-            }
-            else
-            {
-                qDebug() << "Frame played, remaining " << sDiscordClient->getVoiceConnection()->m_qOpusFrames.size();
-            }
-
-            sDiscordClient->getVoiceConnection()->m_qOpusFrames.pop();
+            Pa_StopStream(pStream);
+            Pa_CloseStream(pStream);
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        m_mStreamsBySSRC.clear();
     }
+    m_mtxStreamsBySSRCMutex.unlock();
 }
 
-int AudioServiceStreamCallback(const void *input, void *output, unsigned long frameCount, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void *userData)
+PaStream* AudioService::getStreamForSSRC(uint32_t lSSRC)
 {
-    qDebug() << "AudioServiceCallback frameCount" << frameCount;
+    PaStream* pResult = nullptr;
 
-    // For each callback, check if we have pending audio frames waiting processing.
-    //sDiscordClient->getVoiceConnection()->m_mtxOpusFramesMutex.lock();
-    //{
+    if(m_mStreamsBySSRC.count(lSSRC) > 0)
+    {
+        pResult = m_mStreamsBySSRC.at(lSSRC);
+    }
+    else
+    {
+        PaStreamParameters streamOutputParameters;
+        streamOutputParameters.device = Pa_GetDefaultOutputDevice();
+        streamOutputParameters.channelCount = 2;
+        streamOutputParameters.sampleFormat = paFloat32;
+        streamOutputParameters.hostApiSpecificStreamInfo = nullptr;
+        streamOutputParameters.suggestedLatency = Pa_GetDeviceInfo(streamOutputParameters.device)->defaultLowOutputLatency;
 
-    //}
-    //sDiscordClient->getVoiceConnection()->m_mtxOpusFramesMutex.unlock();
+        if(Pa_OpenStream(&pResult, NULL, &streamOutputParameters, 48000, 960 * 2, paClipOff, NULL, NULL) != paNoError)
+        {
+            qDebug() << "Failed to open stream for SSRC " << lSSRC;
 
+            return nullptr;
+        }
 
+        if(Pa_StartStream(pResult) != paNoError)
+        {
+            qDebug() << "Failed to start stream for SSRC " << lSSRC;
 
-    return 0;
+            Pa_CloseStream(pResult);
+
+            return nullptr;
+        }
+
+        qDebug() << "Stream created for SSRC " << lSSRC;
+
+        m_mtxStreamsBySSRCMutex.lock();
+        {
+            m_mStreamsBySSRC.insert(std::make_pair(lSSRC, pResult));
+        }
+        m_mtxStreamsBySSRCMutex.unlock();
+    }
+
+    return pResult;
 }

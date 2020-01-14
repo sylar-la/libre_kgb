@@ -120,7 +120,7 @@ void DiscordVoiceConnection::onJSONPayloadReceived(QJsonObject &jsonObject)
             // Someone is speaking, or not.
             qDebug() << "VOICE Speaking";
 
-            //DUMP_JSON(jsonData)
+            DUMP_JSON(jsonData)
 
             break;
         }
@@ -210,7 +210,7 @@ void DiscordVoiceConnection::onUDPDataAvailable()
     }
     else
     {
-        if(datagramBuffer.GetSize() >= 12 && datagramBuffer.Read<uint8_t>(0) == 0x90 && datagramBuffer.Read<uint8_t>(1) == 0x78)
+        if(datagramBuffer.GetSize() >= 12 && (datagramBuffer.Read<uint8_t>(0) == 0x80 || datagramBuffer.Read<uint8_t>(0) == 0x90) && datagramBuffer.Read<uint8_t>(1) == 0x78)
         {
             //qDebug() << "Voice Packet " << QByteArray((char*)datagramBuffer.GetBuffer(), datagramBuffer.GetSize()).toHex();
 
@@ -233,12 +233,14 @@ void DiscordVoiceConnection::onUDPDataAvailable()
             }
             else
             {
-                qDebug() << "bandwidth " << opus_packet_get_bandwidth(pDecryptedData);
-                qDebug() << "nbFrames " << opus_packet_get_nb_frames(pDecryptedData, datagramBuffer.GetSize() - 12);
-                qDebug() << "samplesPerFrame " << opus_packet_get_samples_per_frame(pDecryptedData, 48000);
+                //qDebug() << "bandwidth " << opus_packet_get_bandwidth(pDecryptedData);
+                //qDebug() << "nbFrames " << opus_packet_get_nb_frames(pDecryptedData, datagramBuffer.GetSize() - 12);
+                //qDebug() << "samplesPerFrame " << opus_packet_get_samples_per_frame(pDecryptedData, 48000);
+
+                bool bHasExtendedHeader = datagramBuffer.Read<uint8_t>(0) == 0x90;
 
                 float pcmFrames[960*2];
-                int pcmFrameSize = opus_decode_float(m_pOpusDecoder, pDecryptedData + 8, datagramBuffer.GetSize() - 20, pcmFrames, 960, 0);
+                int pcmFrameSize = opus_decode_float(m_pOpusDecoder, pDecryptedData + (bHasExtendedHeader ? 8 : 0), datagramBuffer.GetSize() - (bHasExtendedHeader ? 20 : 12), pcmFrames, 960, 0);
 
                 if(pcmFrameSize < 0)
                 {
@@ -247,9 +249,19 @@ void DiscordVoiceConnection::onUDPDataAvailable()
                 else
                 {
                     // These are always two 960-byte frames = 20 ms of Opus Audio at 48 kHz.
-                    qDebug() << "Valid Opus Frame from available size: " << pcmFrameSize;
+                    if(!bHasExtendedHeader)
+                    {
+                        qDebug() << "Valid Opus Frame from available size: " << pcmFrameSize;
+                    }
 
-                    Pa_WriteStream(sAudioService->getStream(), pcmFrames, 960);
+                    PaStream* pUserStream = sAudioService->getStreamForSSRC(lSSRC);
+
+                    if(pUserStream)
+                    {
+                        Pa_WriteStream(pUserStream, pcmFrames, 960);
+                    }
+                    else
+                        qDebug() << "no stream for playout!!";
 
                     // Store the frame.
                     /**/

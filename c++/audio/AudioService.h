@@ -3,6 +3,8 @@
 
 #include <portaudio.h>
 #include <thread>
+#include <vector>
+#include <mutex>
 
 #include <QtMultimedia/QAudioFormat>
 
@@ -11,24 +13,15 @@ class AudioService
 public:
     AudioService();
 
-    void            initialize();
-    void            shutdown();
+    void                            initialize();
+    void                            shutdown();
 
-    void            playTestSound();
-
-    PaStream*       getStream();
+    PaStream*                       getStreamForSSRC(uint32_t lSSRC);
 private:
-    void            audioThreadRoutine();
-private:
-    PaStream*       m_pStream;
-    QAudioFormat    m_audioFormat;
-
-    bool            m_bAudioThreadContinue = false;
-    std::thread*    m_pAudioThread = nullptr;
+    std::map<uint32_t, PaStream*>   m_mStreamsBySSRC;
+    std::mutex                      m_mtxStreamsBySSRCMutex;
 };
 
 extern AudioService* sAudioService;
-
-int AudioServiceStreamCallback(const void *input, void *output, unsigned long frameCount, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void *userData);
 
 #endif
